@@ -96,12 +96,12 @@ class AttnContextParallelCommunicate:
         self._pending_operations.extend([send_operation, recv_operation])
 
         print(
-            f"RingComm | send_recv | RANK:{self.rank} | "
+            f"RingComm | send_recv | RANK:{self.cp_rank} | "
             f"ACTION:sending | TO:{self.send_rank} | TENSOR:{tensor_to_send}",
             flush=True,
         )
         print(
-            f"RingComm | send_recv | RANK:{self.rank} | "
+            f"RingComm | send_recv | RANK:{self.cp_rank} | "
             f"ACTION:receiving | FROM:{self.recv_rank} | TENSOR:{result_tensor}",
             flush=True,
         )
@@ -115,7 +115,7 @@ class AttnContextParallelCommunicate:
             self._pending_operations
         )
         print(
-            f"RingComm | commit | RANK:{self.rank} | "
+            f"RingComm | commit | RANK:{self.cp_rank} | "
             f"ACTION:committed | NUM_OPS:{len(self._pending_operations) // 2}",
             flush=True,
         )
@@ -128,7 +128,7 @@ class AttnContextParallelCommunicate:
             operation_type = "send" if i % 2 == 0 else "receive"
             peer_rank = self.send_rank if operation_type == "send" else self.recv_rank
             print(
-                f"RingComm | wait | RANK:{self.rank} | "
+                f"RingComm | wait | RANK:{self.cp_rank} | "
                 f"ACTION:completed_{operation_type} | "
                 f"{'FROM' if operation_type == 'receive' else 'TO'}:{peer_rank}",
                 flush=True,
@@ -138,6 +138,7 @@ class AttnContextParallelCommunicate:
         self._active_requests = None
         self._pending_operations = []
         print(
-            f"RingComm | wait | RANK:{self.rank} | " f"ACTION:all_operations_completed",
+            f"RingComm | wait | RANK:{self.cp_rank} | "
+            f"ACTION:all_operations_completed",
             flush=True,
         )
