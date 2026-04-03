@@ -50,11 +50,11 @@ class RingAttentionBackend(AttentionBackend):
 
         for step in range(cp_world_size):
             if step + 1 != cp_world_size:
-                next_k = cp_ring_comm.send_recv(k)
-                next_v = cp_ring_comm.send_recv(v)
+                next_k = cp_ring_comm.send_recv_kvcache(k)
+                next_v = cp_ring_comm.send_recv_kvcache(v)
                 cp_ring_comm.commit()
 
-            if not causal or step <= cp_ring_comm.rank:
+            if not causal or step <= cp_ring_comm.cp_rank:
                 block_out, block_softmax_lse, *rest = attention_fn(
                     return_softmax_lse=True,
                     *args,
