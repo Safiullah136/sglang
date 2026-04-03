@@ -74,7 +74,7 @@ def moe_expert_parallel_all_reduce(input_: torch.Tensor) -> torch.Tensor:
 
 
 class AttnContextParallelCommunicate:
-    def __init__(self, msg: str = ""):
+    def __init__(self):
         self._pending_operations: list[torch.distributed.P2POp] = []
         self._active_requests = None
         self.cp_group = get_attn_cp_group()

@@ -38,6 +38,7 @@ from sglang.jit_kernel.flash_attention_v4 import (
 from sglang.jit_kernel.flash_attention_v4 import (
     flash_attn_with_kvcache as flash_attn_with_kvcache_fa4,
 )
+from sglang.srt.layers.attention.ringattention_backend import RingAttentionBackend
 
 
 @dataclass
@@ -74,6 +75,8 @@ class FlashAttentionMetadata:
     encoder_lens_int32: torch.Tensor = None
     # Page table for the encoder
     encoder_page_table: torch.Tensor = None
+    # Ring Attention Backend
+    ring_attn_backend: RingAttentionBackend = None
 
     @dataclass
     class LocalAttentionMetadata:
@@ -644,6 +647,8 @@ class FlashAttentionBackend(AttentionBackend):
                     torch.cumsum(extend_seq_lens, dim=0, dtype=torch.int32), (1, 0)
                 )
             else:
+                if forward_batch.do_ring_attn:
+                    metadata.ring_attn_backend = RingAttentionBackend()
                 metadata.max_seq_len_q = metadata.max_seq_len_k
                 metadata.cu_seqlens_q = metadata.cu_seqlens_k
 
@@ -931,25 +936,32 @@ class FlashAttentionBackend(AttentionBackend):
                     _fa_cp_attn,
                 )
             else:
-                result = flash_attn_with_kvcache(
-                    q=q.contiguous().view(-1, layer.tp_q_head_num, layer.head_dim),
-                    k_cache=key_cache,
-                    v_cache=value_cache,
-                    page_table=page_table,
-                    cache_seqlens=cache_seqlens,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k_new=cu_seqlens_k if not use_local_attn else None,
-                    max_seqlen_q=max_seqlen_q,
-                    softmax_scale=layer.scaling,
-                    causal=False if use_cascade_attn else causal,
-                    window_size=window_size,
-                    softcap=layer.logit_cap,
-                    k_descale=k_descale,
-                    v_descale=v_descale,
-                    return_softmax_lse=use_cascade_attn,
-                    num_splits=self.num_splits,
-                    **kwargs,
-                )
+                args = {
+                    "q": q.contiguous().view(-1, layer.tp_q_head_num, layer.head_dim),
+                    "k_cache": key_cache,
+                    "v_cache": value_cache,
+                    "page_table": page_table,
+                    "cache_seqlens": cache_seqlens,
+                    "cu_seqlens_q": cu_seqlens_q,
+                    "cu_seqlens_k_new": cu_seqlens_k if not use_local_attn else None,
+                    "max_seqlen_q": max_seqlen_q,
+                    "softmax_scale": layer.scaling,
+                    "causal": False if use_cascade_attn else causal,
+                    "window_size": window_size,
+                    "softcap": layer.logit_cap,
+                    "k_descale": k_descale,
+                    "v_descale": v_descale,
+                    "num_splits": self.num_splits,
+                }
+                if metadata.ring_attn_backend is not None:
+                    metadata.ring_attn_backend.forward_extend(
+                        flash_attn_with_kvcache, *args, **kwargs
+                    )
+                else:
+                    result = flash_attn_with_kvcache(
+                        *args,
+                        **kwargs,
+                    )
 
             if use_cascade_attn:
                 o, softmax_lse, *rest = result
